@@ -1,16 +1,11 @@
-ifeq ($(PREFIX),)
-    PREFIX := /usr
-endif
-
 install:
-	# systemd file
-	install -d $(DESTDIR)$(PREFIX)/lib/systemd/user/
-	install gotify-dunst.service $(DESTDIR)$(PREFIX)/lib/systemd/user/
+	# openrc file
+	install gotify-dunst.openrc /etc/init.d/gotify-dunst
 
 	# files in /usr/lib
-	install -d $(DESTDIR)$(PREFIX)/lib/gotify-dunst/
-	install main.py $(DESTDIR)$(PREFIX)/lib/gotify-dunst/
-	install gotify-dunst.conf $(DESTDIR)$(PREFIX)/lib/gotify-dunst/
+	install -d /home/$(SUDO_USER)/.config/gotify-dunst/
+	install gotify-dunst.py /home/$(SUDO_USER)/.local/bin/
+	install gotify-dunst.conf /home/$(SUDO_USER)/.config/gotify-dunst/
 
 	# files in /usr/share
 	install -d $(DESTDIR)$(PREFIX)/share/applications

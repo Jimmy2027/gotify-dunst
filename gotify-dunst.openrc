@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+
+description="Gotify-Dunst Service"
+pidfile=/var/run/gotify-dunst.pid
+# save this file as gotify-dunst.USER
+# see https://wiki.gentoo.org/wiki/OpenRC/User_services
+USER=${RC_SVCNAME##*.}
+command="uv run gotify-dunst.py"
+directory="/home/${USER}/.local/bin/"
+
+command_user="${USER}"
+command_background=true
+
+
+depend() {
+    need net
+}

@@ -1,3 +1,12 @@
+# /// script
+# dependencies = [
+#     "gotify[stream]>=0.6.0",
+#     "loguru>=0.7.3",
+#     "requests>=2.32.3",
+#     "websocket-client>=1.8.0",
+# ]
+# ///
+
 import asyncio
 import configparser
 import subprocess
@@ -14,6 +23,7 @@ except ImportError:
     pass
 
 from gotify import AsyncGotify
+from loguru import logger
 
 # Setup and Configuration
 config_dir = Path.home() / ".config/gotify-dunst"
@@ -22,7 +32,10 @@ config_path = config_dir / "gotify-dunst.conf"
 default_config_path = Path("gotify-dunst.conf")
 
 if not config_path.exists():
+    logger.info("Configuration file not found. Creating a new one.")
     config_path.write_bytes(default_config_path.read_bytes())
+
+logger.debug(f"Using configuration file: {config_path}")
 
 config = configparser.ConfigParser()
 config.read(config_path)
