@@ -1,81 +1,130 @@
-import websocket
-from urllib.request import urlopen, Request
-import json
-import subprocess
-import os.path
+import asyncio
 import configparser
+import subprocess
+import time
+from pathlib import Path
+
+import requests
 
 try:
-    import setproctitle
-    setproctitle.setproctitle("gotify-dunst")
-except:
+    from setproctitle import setproctitle
+
+    setproctitle("gotify-dunst")
+except ImportError:
     pass
 
-home = os.path.expanduser('~')
-configpath = home+'/.config/gotify-dunst/gotify-dunst.conf'
+from gotify import AsyncGotify
 
-if not os.path.isfile(configpath):
-    from shutil import copyfile
-    from os import makedirs
-    makedirs(home+'/.config/gotify-dunst/',exist_ok=True)
-    copyfile('gotify-dunst.conf',configpath)
+# Setup and Configuration
+config_dir = Path.home() / ".config/gotify-dunst"
+config_dir.mkdir(parents=True, exist_ok=True)
+config_path = config_dir / "gotify-dunst.conf"
+default_config_path = Path("gotify-dunst.conf")
+
+if not config_path.exists():
+    config_path.write_bytes(default_config_path.read_bytes())
 
 config = configparser.ConfigParser()
-config.read(configpath)
+config.read(config_path)
 
-domain = config.get('server','domain',fallback=None)
+domain = config.get("server", "domain", fallback="push.example.com")
+token = config.get("server", "token")
+ssl = config.getboolean("server", "ssl", fallback=False)
 
-if domain in [ "push.example.com", None]:
-    print("Confiuration error. Make sure you have properly modified the configuration")
+if domain in ["push.example.com", None]:
+    print(
+        "Configuration error. Make sure you have properly modified the configuration."
+    )
     exit()
 
-token = config.get('server','token')
+cache_dir = Path.home() / ".cache/gotify-dunst"
+cache_dir.mkdir(exist_ok=True)
 
-ssl = "true" == config.get('server','ssl', fallback='false').lower()
-
-path = "{}/.cache/gotify-dunst".format(home)
-if not os.path.isdir(path):
-    os.mkdir(path)
 
 def get_picture(appid):
-    imgPath = "{}/{}.jpg".format(path, appid)
-    if os.path.isfile(path):
-        return imgPath
-    else:
-        if ssl:
-            protocol = 'https'
-        else:
-            protocol = 'http'
+    """
+    Get the picture of an application with the given appid.
 
-        req = Request("{}://{}/application?token={}".format(protocol, domain, token))
-        req.add_header("User-Agent", "Mozilla/5.0")
-        r = json.loads(urlopen(req).read())
-        for i in r:
-            if i['id'] == appid:
-                with open(imgPath, "wb") as f:
-                    req = Request("{}://{}/{}?token={}".format(protocol, domain, i['image'], token))
-                    req.add_header("User-Agent", "Mozilla/5.0")
-                    f.write(urlopen(req).read())
-        return imgPath
+    Args:
+        appid (int): The id of the application.
 
-def send_notification(message):
-    m = json.loads(message)
-    if m['priority'] <= 3:
-        subprocess.Popen(['notify-send', m['title'], m['message'], "-u", "low", "-i", get_picture(m['appid']), "-a", "Gotify", "-h", "string:desktop-entry:gotify-dunst"])
-    if 4 <= m['priority'] <= 7:
-        subprocess.Popen(['notify-send', m['title'], m['message'], "-u", "normal", "-i", get_picture(m['appid']), "-a", "Gotify", "-h", "string:desktop-entry:gotify-dunst"])
-    if m['priority'] > 7:
-        subprocess.Popen(['notify-send', m['title'], m['message'], "-u", "critical", "-i", get_picture(m['appid']), "-a", "Gotify", "-h", "string:desktop-entry:gotify-dunst"])
+    Returns:
+        str: The path to the downloaded image file.
+    """
+    if not isinstance(appid, int):
+        raise ValueError("appid must be an integer")
 
-def on_message(ws, message):
-    send_notification(message)
+    img_path = cache_dir / f"{appid}.jpg"
+    if img_path.exists():
+        return str(img_path)
+
+    protocol = "https" if ssl else "http"
+    req = requests.Request(f"{protocol}://{domain}/application?token={token}")
+    req.headers["User-Agent"] = "Mozilla/5.0"
+
+    try:
+        response = requests.get(req)
+        response.raise_for_status()
+        response_data = response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error occurred during HTTP request: {e}")
+        return str(img_path)
+
+    for app in response_data:
+        if app["id"] == appid:
+            img_url = f"{protocol}://{domain}/{app['image']}?token={token}"
+            img_req = requests.Request(img_url)
+            img_req.headers["User-Agent"] = "Mozilla/5.0"
+
+            try:
+                img_response = requests.get(img_req)
+                img_response.raise_for_status()
+                img_path.write_bytes(img_response.content)
+            except requests.exceptions.RequestException as e:
+                print(f"Error occurred during image download: {e}")
+            break
+
+    return str(img_path)
+
+
+def send_notification(m: dict):
+    priority_map = {range(1, 4): "low", range(4, 8): "normal", range(8, 11): "critical"}
+    priority = next(
+        (p for p_range, p in priority_map.items() if m["priority"] in p_range), "normal"
+    )
+
+    subprocess.run(
+        [
+            "notify-send",
+            m["title"],
+            m["message"],
+            "-u",
+            priority,
+            "-i",
+            get_picture(m["appid"]),
+            "-a",
+            "Gotify",
+            "-h",
+            "string:desktop-entry:gotify-dunst",
+        ],
+        check=False,
+    )
+
+
+async def get_messages():
+    async_gotify = AsyncGotify(
+        base_url=f"{'https' if ssl else 'http'}://{domain}",
+        client_token=token,
+    )
+
+    async for msg in async_gotify.stream():
+        send_notification(msg)
+
 
 if __name__ == "__main__":
-    if ssl:
-        protocol = 'wss'
-    else:
-        protocol = 'ws'
-
-    ws = websocket.WebSocketApp("{}://{}/stream?token={}".format(protocol, domain, token),
-                              on_message = on_message)
-    ws.run_forever()
+    while True:
+        try:
+            asyncio.run(get_messages())
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            time.sleep(5)
