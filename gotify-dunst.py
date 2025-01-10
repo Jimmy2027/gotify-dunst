@@ -25,6 +25,9 @@ except ImportError:
 from gotify import AsyncGotify
 from loguru import logger
 
+# add a logger to /var/log/gotify-dunst/gotify-dunst.log
+logger.add("/var/log/gotify-dunst/gotify-dunst.log", rotation="1 week")
+
 # Setup and Configuration
 config_dir = Path.home() / ".config/gotify-dunst"
 config_dir.mkdir(parents=True, exist_ok=True)
@@ -131,6 +134,7 @@ async def get_messages():
     )
 
     async for msg in async_gotify.stream():
+        logger.debug(f"Received message: {msg}")
         send_notification(msg)
 
 
