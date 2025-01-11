@@ -14,4 +14,13 @@ command_background=true
 
 depend() {
     need net
+    need dbus
+}
+
+# TODO: there was talk of user services for openrc, watch out for that
+# also, it might be better to expose DBUS_SESSION_BUS_ADDRESS instead
+start_pre() {
+    if [ -z "$DISPLAY" ]; then
+        export DISPLAY=:0
+    fi
 }
