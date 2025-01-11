@@ -40,6 +40,24 @@ if not config_path.exists():
 
 logger.debug(f"Using configuration file: {config_path}")
 
+# Send a notification when the script is started
+subprocess.run(  # nosec
+    [
+        "notify-send",
+        "Gotify-Dunst",
+        "Gotify-Dunst is now running.",
+        "-u",
+        "low",
+        "-i",
+        "gotify-dunst",
+        "-a",
+        "Gotify",
+        "-h",
+        "string:desktop-entry:gotify-dunst",
+    ],
+    check=False,
+)
+
 config = configparser.ConfigParser()
 config.read(config_path)
 
