@@ -1,11 +1,18 @@
 install:
 	# openrc file
 	install gotify-dunst.openrc /etc/init.d/gotify-dunst
+	ln -s /etc/init.d/gotify-dunst /etc/init.d/gotify-dunst.$(SUDO_USER) -f
+	rc-update add gotify-dunst.$(SUDO_USER) default
+	rc-service gotify-dunst.$(SUDO_USER) start
 
 	# files in /usr/lib
 	install -d /home/$(SUDO_USER)/.config/gotify-dunst/
 	install gotify-dunst.py /home/$(SUDO_USER)/.local/bin/
 	install gotify-dunst.conf /home/$(SUDO_USER)/.config/gotify-dunst/
+
+	# create logdir
+	install -d /var/log/gotify-dunst
+	chown $(SUDO_USER):$(SUDO_USER) /var/log/gotify-dunst
 
 	# files in /usr/share
 	install -d $(DESTDIR)$(PREFIX)/share/applications
